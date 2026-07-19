@@ -12,6 +12,6 @@ class LinearTui < Formula
   end
 
   test do
-    assert_match "linear-tui", shell_output("#{bin}/linear-tui --help")
+    assert_match "linear-tui", shell_output("#{bin}/linear-tui --version")
   end
 end
