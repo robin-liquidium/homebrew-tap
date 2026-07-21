@@ -4,6 +4,12 @@ Homebrew formulae and casks maintained by [Robin](https://github.com/robin-liqui
 
 ## Install
 
+Install Dayline directly:
+
+```sh
+brew install --cask robin-liquidium/tap/dayline
+```
+
 Install Linear TUI directly:
 
 ```sh
