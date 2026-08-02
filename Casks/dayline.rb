@@ -1,6 +1,6 @@
 cask "dayline" do
-  version "0.2.2"
-  sha256 "e567a3a510ef010fe2937873cbb5ed313e1d3a4adc200dfb480c3f69da18b681"
+  version "0.2.3"
+  sha256 "1367072dd5cd78b1b49d11b97c3048de15187ed4f6e3440a73b9f4ac357877fc"
 
   url "https://github.com/robin-liquidium/dayline/releases/download/v#{version}/Dayline-#{version}.dmg",
       verified: "github.com/robin-liquidium/dayline/"
