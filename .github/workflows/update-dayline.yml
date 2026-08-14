@@ -1,0 +1,150 @@
+name: Update Dayline cask
+
+on:
+  schedule:
+    - cron: "23 * * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: update-dayline-cask
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  resolve:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    outputs:
+      update: ${{ steps.release.outputs.update }}
+      version: ${{ steps.release.outputs.version }}
+      sha256: ${{ steps.release.outputs.sha256 }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Resolve latest stable Dayline release
+        id: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          release="$(gh api repos/robin-liquidium/dayline/releases/latest)"
+          tag="$(jq -r '.tag_name' <<< "$release")"
+          version="${tag#v}"
+          # shellcheck disable=SC2016
+          current="$(ruby -ne 'puts $1 if $_ =~ /^  version "([^"]+)"$/' Casks/dayline.rb)"
+
+          [[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          [[ "$current" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          [[ "$(jq -r '.draft' <<< "$release")" == "false" ]]
+          [[ "$(jq -r '.prerelease' <<< "$release")" == "false" ]]
+          [[ "$(jq -r '.immutable' <<< "$release")" == "true" ]]
+
+          if [[ "$version" == "$current" ]]; then
+            echo "Dayline $version is already current."
+            echo "update=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          newest="$(printf '%s\n%s\n' "$current" "$version" | sort -V | tail -n 1)"
+          [[ "$newest" == "$version" && "$version" != "$current" ]]
+
+          asset_name="Dayline-$version.dmg"
+          asset="$(jq -c --arg name "$asset_name" '.assets[] | select(.name == $name)' <<< "$release")"
+          [[ -n "$asset" ]]
+          asset_url="$(jq -r '.browser_download_url' <<< "$asset")"
+          expected="$(jq -r '.digest | sub("^sha256:"; "")' <<< "$asset")"
+          [[ "$asset_url" == "https://github.com/robin-liquidium/dayline/releases/download/$tag/$asset_name" ]]
+          [[ "$expected" =~ ^[0-9a-f]{64}$ ]]
+
+          dmg="$RUNNER_TEMP/$asset_name"
+          curl --fail --location --proto '=https' --tlsv1.2 "$asset_url" --output "$dmg"
+          actual="$(sha256sum "$dmg" | cut -d ' ' -f 1)"
+          [[ "$actual" == "$expected" ]]
+
+          {
+            echo "update=true"
+            echo "version=$version"
+            echo "sha256=$actual"
+          } >> "$GITHUB_OUTPUT"
+
+  test:
+    needs: resolve
+    if: needs.resolve.outputs.update == 'true'
+    strategy:
+      matrix:
+        os: [ubuntu-24.04, macos-15-intel, macos-26]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Set up Homebrew
+        id: set-up-homebrew
+        uses: Homebrew/actions/setup-homebrew@13f73d7cbd2f8f180d85d8f7201698cf110bf84c # main
+        with:
+          token: ${{ github.token }}
+
+      - name: Cache Homebrew Bundler RubyGems
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: ${{ steps.set-up-homebrew.outputs.gems-path }}
+          key: ${{ matrix.os }}-rubygems-${{ steps.set-up-homebrew.outputs.gems-hash }}
+          restore-keys: ${{ matrix.os }}-rubygems-
+
+      - run: brew test-bot --only-cleanup-before
+
+      - name: Apply candidate cask update
+        env:
+          DAYLINE_VERSION: ${{ needs.resolve.outputs.version }}
+          DAYLINE_SHA256: ${{ needs.resolve.outputs.sha256 }}
+        run: |
+          ruby .github/scripts/update_dayline_cask.rb
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add Casks/dayline.rb
+          git commit -m "Update Dayline to $DAYLINE_VERSION"
+
+      - run: brew test-bot --only-setup
+      - run: brew test-bot --only-tap-syntax
+      - run: brew test-bot --only-formulae
+
+  publish:
+    needs: [resolve, test]
+    if: needs.resolve.outputs.update == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ github.sha }}
+
+      - name: Publish tested cask update
+        env:
+          DAYLINE_VERSION: ${{ needs.resolve.outputs.version }}
+          DAYLINE_SHA256: ${{ needs.resolve.outputs.sha256 }}
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REF" == "refs/heads/main" ]]
+          git fetch --no-tags origin main
+          [[ "$(git rev-parse HEAD)" == "$(git rev-parse origin/main)" ]]
+
+          ruby .github/scripts/update_dayline_cask.rb
+          git diff --check
+          [[ "$(git diff --name-only)" == "Casks/dayline.rb" ]]
+
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add Casks/dayline.rb
+          git commit -m "Update Dayline to $DAYLINE_VERSION"
+          git push origin HEAD:main
