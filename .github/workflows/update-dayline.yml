@@ -20,6 +20,7 @@ jobs:
       update: ${{ steps.release.outputs.update }}
       version: ${{ steps.release.outputs.version }}
       sha256: ${{ steps.release.outputs.sha256 }}
+      cask_blob: ${{ steps.release.outputs.cask_blob }}
     steps:
       - uses: actions/checkout@v6
         with:
@@ -36,12 +37,15 @@ jobs:
           tag="$(jq -r '.tag_name' <<< "$release")"
           version="${tag#v}"
           current="$(ruby -ne 'puts $1 if $_ =~ /^  version "([^"]+)"$/' Casks/dayline.rb)"
+          cask_blob="$(git hash-object Casks/dayline.rb)"
 
           [[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
           [[ "$current" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
           [[ "$(jq -r '.draft' <<< "$release")" == "false" ]]
           [[ "$(jq -r '.prerelease' <<< "$release")" == "false" ]]
           [[ "$(jq -r '.immutable' <<< "$release")" == "true" ]]
+
+          echo "cask_blob=$cask_blob" >> "$GITHUB_OUTPUT"
 
           if [[ "$version" == "$current" ]]; then
             echo "Dayline $version is already current."
@@ -128,8 +132,10 @@ jobs:
         env:
           DAYLINE_VERSION: ${{ needs.resolve.outputs.version }}
           DAYLINE_SHA256: ${{ needs.resolve.outputs.sha256 }}
+          DAYLINE_CASK_BLOB: ${{ needs.resolve.outputs.cask_blob }}
         run: |
           set -euo pipefail
+          [[ "$(git hash-object Casks/dayline.rb)" == "$DAYLINE_CASK_BLOB" ]]
           ruby .github/scripts/update_dayline_cask.rb
           git diff --check
           [[ "$(git diff --name-only)" == "Casks/dayline.rb" ]]
