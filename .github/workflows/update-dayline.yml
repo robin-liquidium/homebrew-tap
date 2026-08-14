@@ -36,6 +36,7 @@ jobs:
           release="$(gh api repos/robin-liquidium/dayline/releases/latest)"
           tag="$(jq -r '.tag_name' <<< "$release")"
           version="${tag#v}"
+          # shellcheck disable=SC2016 -- Ruby expands these variables.
           current="$(ruby -ne 'puts $1 if $_ =~ /^  version "([^"]+)"$/' Casks/dayline.rb)"
 
           [[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
@@ -66,9 +67,11 @@ jobs:
           actual="$(sha256sum "$dmg" | cut -d ' ' -f 1)"
           [[ "$actual" == "$expected" ]]
 
-          echo "update=true" >> "$GITHUB_OUTPUT"
-          echo "version=$version" >> "$GITHUB_OUTPUT"
-          echo "sha256=$actual" >> "$GITHUB_OUTPUT"
+          {
+            echo "update=true"
+            echo "version=$version"
+            echo "sha256=$actual"
+          } >> "$GITHUB_OUTPUT"
 
   test:
     needs: resolve
