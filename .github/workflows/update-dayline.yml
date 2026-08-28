@@ -89,7 +89,7 @@ jobs:
 
       - name: Set up Homebrew
         id: set-up-homebrew
-        uses: Homebrew/actions/setup-homebrew@13f73d7cbd2f8f180d85d8f7201698cf110bf84c # main
+        uses: Homebrew/actions/setup-homebrew@3cdb78d0f62ad29dd32de765782654f4eedea607 # main
         with:
           token: ${{ github.token }}
 
