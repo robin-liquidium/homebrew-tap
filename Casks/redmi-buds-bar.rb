@@ -1,6 +1,6 @@
 cask "redmi-buds-bar" do
-  version "0.2.0"
-  sha256 "34485edbbe64b0d5ea7bae5b39542c653ef0d8fecb138a38cee236eb3aaa37e2"
+  version "0.3.0"
+  sha256 "1ad3a9f477096fbe13aec8fd34016c877360563ee0ceead8a76cf0465ab2f0d3"
 
   url "https://github.com/robin-liquidium/redmi-buds-bar/releases/download/v#{version}/RedmiBudsBar-#{version}.dmg"
   name "Redmi Buds Bar"
